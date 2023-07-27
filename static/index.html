@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>GPU Dashboard</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.0/socket.io.js"></script>
+</head>
+
+<body>
+    <table id="gpu-table" class="display" style="width:100%">
+        <thead>
+            <tr>
+                <th>Server</th>
+                <th>GPU</th>
+                <th>Name</th>
+                <th>Temp</th>
+                <th>Power</th>
+                <th>Memory</th>
+                <th>Utilization</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+    <script>
+        var socket = io.connect('http://localhost:5001');
+        var table = $('#gpu-table').DataTable();
+
+        var retries = 0;
+        var maxRetries = 10;
+
+        function addDataToTable(msg) {
+            table.clear().draw();
+
+            for (var i = 0; i < msg['data'].length; i++) {
+                var row = [];
+                row.push(msg['server']);
+                row.push(i);
+                row.push(msg['data'][i]['name']);
+                row.push(msg['data'][i]['temperature']);
+                row.push(msg['data'][i]['power']);
+                row.push(msg['data'][i]['memory']);
+                row.push(msg['data'][i]['utilization']);
+                table.row.add(row).draw();
+            }
+        }
+
+        function tryToGetData() {
+            socket.emit('get_data');
+            retries += 1;
+            if (retries < maxRetries) {
+                setTimeout(tryToGetData, 3000);
+            }
+        }
+
+        socket.on('gpu_data', function (msg) {
+            for (var i = 0; i < msg['data'].length; i++) {
+                var row = [];
+                row.push(msg['server']);
+                row.push(i);
+                row.push(msg['data'][i]['name']);
+                row.push(msg['data'][i]['temperature']);
+                row.push(msg['data'][i]['power']);
+                row.push(msg['data'][i]['memory']);
+                row.push(msg['data'][i]['utilization']);
+
+                // Check if a row with this IP and GPU number already exists.
+                var rowIndex = -1;
+                table.rows(function (idx, data, node) {
+                    if (data[0] === row[0] && data[1] === row[1]) {
+                        rowIndex = idx;
+                    }
+                });
+
+                if (rowIndex === -1) {
+                    // If no such row exists, add a new row.
+                    table.row.add(row).draw();
+                } else {
+                    // If such a row exists, update it.
+                    table.row(rowIndex).data(row).draw();
+                }
+            }
+        });
+
+        tryToGetData();  // start trying to get data
+    </script>
+</body>
+
+</html>
