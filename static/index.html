@@ -7,10 +7,43 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.css">
     <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
     <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.0/socket.io.js"></script>
 </head>
 
 <body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-3">
+                <label for="server-select">Select Server</label>
+                <select id="server-select" class="form-control">
+                    <option value="all">All</option>
+                    <option value="banana">Banana</option>
+                    <option value="chai">Chai</option>
+                    <option value="cheetah">Cheetah</option>
+                    <option value="guacamole">Guacamole</option>
+                    <option value="kiwi">Kiwi</option>
+                    <option value="lavazza">Lavazza</option>
+                    <option value="latte">Latte</option>
+                    <option value="lox">Lox</option>
+                    <option value="macchiato">Macchiato</option>
+                    <option value="matcha">Matcha</option>
+                    <!-- Add more servers here -->
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="memory-filter">Memory Filter (<= MiB)</label>
+                        <input type="number" id="memory-filter" class="form-control" placeholder="Enter Memory">
+            </div>
+            <div class="col-md-3">
+                <label for="utilization-filter">Utilization Filter (<= %)</label>
+                        <input type="number" id="utilization-filter" class="form-control"
+                            placeholder="Enter Utilization">
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-primary mt-4" onclick="updateTable()">Filter</button>
+            </div>
+        </div>
+    </div>
+
     <table id="gpu-table" class="display" style="width:100%">
         <thead>
             <tr>
@@ -27,66 +60,68 @@
         </tbody>
     </table>
     <script>
-        var socket = io.connect('http://localhost:5001');
-        var table = $('#gpu-table').DataTable();
+        var table = $('#gpu-table').DataTable({ searching: true });
+        var servers = ['guacamole', 'lavazza', "banana", "matcha", "latte", "chai", "lox", "cheetah", "kiwi", "macchiato"];  // Add more servers here
+        var lastData = {};
 
-        var retries = 0;
-        var maxRetries = 10;
-
-        function addDataToTable(msg) {
-            table.clear().draw();
-
-            for (var i = 0; i < msg['data'].length; i++) {
-                var row = [];
-                row.push(msg['server']);
-                row.push(i);
-                row.push(msg['data'][i]['name']);
-                row.push(msg['data'][i]['temperature']);
-                row.push(msg['data'][i]['power']);
-                row.push(msg['data'][i]['memory']);
-                row.push(msg['data'][i]['utilization']);
-                table.row.add(row).draw();
-            }
+        function parseValue(value) {
+            return parseFloat(value.split(' ')[0]);
         }
 
-        function tryToGetData() {
-            socket.emit('get_data');
-            retries += 1;
-            if (retries < maxRetries) {
-                setTimeout(tryToGetData, 3000);
-            }
-        }
+        function updateTable() {
+            var selectedServer = $('#server-select').val();
+            var memoryFilter = Number($('#memory-filter').val()) || Infinity;
+            var utilizationFilter = Number($('#utilization-filter').val()) || Infinity;
 
-        socket.on('gpu_data', function (msg) {
-            for (var i = 0; i < msg['data'].length; i++) {
-                var row = [];
-                row.push(msg['server']);
-                row.push(i);
-                row.push(msg['data'][i]['name']);
-                row.push(msg['data'][i]['temperature']);
-                row.push(msg['data'][i]['power']);
-                row.push(msg['data'][i]['memory']);
-                row.push(msg['data'][i]['utilization']);
+            servers.forEach(function (hostname) {
+                $.getJSON('/gpu_data/' + hostname, function (data) {
+                    // Filter data
+                    var filteredData = data.filter(gpu => {
+                        var memory = parseValue(gpu.memory);
+                        var utilization = parseValue(gpu.utilization);
+                        return memory <= memoryFilter && utilization <= utilizationFilter;
+                    });
 
-                // Check if a row with this IP and GPU number already exists.
-                var rowIndex = -1;
-                table.rows(function (idx, data, node) {
-                    if (data[0] === row[0] && data[1] === row[1]) {
-                        rowIndex = idx;
+                    // Compare with last fetched data
+                    if (JSON.stringify(lastData[hostname]) !== JSON.stringify(filteredData)) {
+                        // Remove existing rows for this server
+                        table.rows(function (idx, data, node) {
+                            return data[0] === hostname;
+                        }).remove();
+
+                        // If the server is not selected and it's not 'all' then just update the lastData without rendering
+                        if (selectedServer !== 'all' && selectedServer !== hostname) {
+                            lastData[hostname] = filteredData;
+                            return;
+                        }
+
+                        // Add new rows
+                        filteredData.forEach((gpu, index) => {
+                            var row = [];
+                            row.push(hostname);
+                            row.push(index);
+                            row.push(gpu.name);
+                            row.push(gpu.temperature);
+                            row.push(gpu.power);
+                            row.push(gpu.memory);
+                            row.push(gpu.utilization);
+                            table.row.add(row);
+                        });
+
+                        table.draw();
                     }
+
+                    // Store last fetched data
+                    lastData[hostname] = filteredData;
                 });
+            });
+        }
 
-                if (rowIndex === -1) {
-                    // If no such row exists, add a new row.
-                    table.row.add(row).draw();
-                } else {
-                    // If such a row exists, update it.
-                    table.row(rowIndex).data(row).draw();
-                }
-            }
-        });
+        // Initial table update
+        updateTable();
 
-        tryToGetData();  // start trying to get data
+        // Update the table every second for the selected server(s).
+        setInterval(updateTable, 1000);
     </script>
 </body>
 
