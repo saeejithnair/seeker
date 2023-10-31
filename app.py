@@ -19,7 +19,7 @@ def parse_nvidia_smi_output(output):
 
             gpu_info = {
                 "name": elements[0],
-                "temperature": f"{elements[6]}",
+                "temperature": f"{elements[6]}°C",
                 "power": f"{elements[1]} / {elements[5]}",
                 "memory": f"{elements[2]} / {elements[3]}",
                 "utilization": elements[4],
@@ -40,6 +40,10 @@ def gpu_data(hostname):
     server = SERVERS.get(hostname)
     if not server:
         return jsonify({"error": "Unknown server"}), 404
+
+    transport = server.ssh.get_transport()
+    if transport is None or not transport.is_active():
+        return jsonify({"error": "Server is not connected"}), 500
 
     def callback(output):
         # Parse the nvidia-smi output and store it in the server object.

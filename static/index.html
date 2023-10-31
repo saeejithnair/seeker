@@ -19,13 +19,18 @@
                     <option value="banana">Banana</option>
                     <option value="chai">Chai</option>
                     <option value="cheetah">Cheetah</option>
+                    <option value="citrus">Citrus</option>
+                    <option value="davincci">Davincci</option>
                     <option value="guacamole">Guacamole</option>
+                    <option value="frappe">Frappe</option>
                     <option value="kiwi">Kiwi</option>
-                    <option value="lavazza">Lavazza</option>
                     <option value="latte">Latte</option>
+                    <option value="lavazza">Lavazza</option>
+                    <option value="lilac">Lilac</option>
                     <option value="lox">Lox</option>
                     <option value="macchiato">Macchiato</option>
                     <option value="matcha">Matcha</option>
+                    <option value="platypus">Platypus</option>
                     <!-- Add more servers here -->
                 </select>
             </div>
@@ -61,7 +66,7 @@
     </table>
     <script>
         var table = $('#gpu-table').DataTable({ searching: true });
-        var servers = ['guacamole', 'lavazza', "banana", "matcha", "latte", "chai", "lox", "cheetah", "kiwi", "macchiato"];  // Add more servers here
+        var servers = ['banana', 'chai', 'cheetah', 'citrus', 'davincci', 'frappe', 'guacamole', 'kiwi', 'latte', 'lavazza', 'lilac', 'lox', 'macchiato', 'matcha', 'platypus']
         var lastData = {};
 
         function parseValue(value) {
