@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+# servers.py
 from paramiko import SSHClient, AutoAddPolicy
 from threading import Thread
 from queue import Queue
@@ -29,6 +29,10 @@ class Server:
     def exec_command(self, command, callback):
         self.queue.put((command, callback))
 
+    def exec_command_sync(self, command):
+        stdin, stdout, stderr = self.ssh.exec_command(command)
+        return stdout.read().decode()
+
 
 SERVERS_LIST = [
     "banana",
@@ -36,7 +40,6 @@ SERVERS_LIST = [
     "cheetah",
     "citrus",
     "davincci",
-    # "frappe",
     "guacamole",
     "kiwi",
     "latte",

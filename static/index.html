@@ -16,22 +16,7 @@
                 <label for="server-select">Select Server</label>
                 <select id="server-select" class="form-control">
                     <option value="all">All</option>
-                    <option value="banana">Banana</option>
-                    <option value="chai">Chai</option>
-                    <option value="cheetah">Cheetah</option>
-                    <option value="citrus">Citrus</option>
-                    <option value="davincci">Davincci</option>
-                    <option value="guacamole">Guacamole</option>
-                    <option value="frappe">Frappe</option>
-                    <option value="kiwi">Kiwi</option>
-                    <option value="latte">Latte</option>
-                    <option value="lavazza">Lavazza</option>
-                    <option value="lilac">Lilac</option>
-                    <option value="lox">Lox</option>
-                    <option value="macchiato">Macchiato</option>
-                    <option value="matcha">Matcha</option>
-                    <option value="platypus">Platypus</option>
-                    <!-- Add more servers here -->
+                    <!-- Server options will be dynamically populated -->
                 </select>
             </div>
             <div class="col-md-3">
@@ -47,6 +32,39 @@
                 <button class="btn btn-primary mt-4" onclick="updateTable()">Filter</button>
             </div>
         </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <h3>Launch Experiment</h3>
+                <form id="experiment-form">
+                    <div class="form-group">
+                        <label for="experiment-server">Server</label>
+                        <select id="experiment-server" class="form-control" required>
+                            <!-- Server options will be dynamically populated -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="experiment-gpus">GPUs</label>
+                        <select id="experiment-gpus" class="form-control" multiple required>
+                            <!-- GPU options will be dynamically populated -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="experiment-project">Project</label>
+                        <input type="text" id="experiment-project" class="form-control" required
+                            placeholder="e.g., ~/work/project">
+                    </div>
+                    <div class="form-group">
+                        <label for="experiment-command">Command</label>
+                        <input type="text" id="experiment-command" class="form-control" required
+                            placeholder="e.g., docker compose run -d --build elastic-nerf wandb agent saeejithn/elastic-nerf/bqxz2xvw">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Launch Experiment</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="experiment-output" class="mt-4"></div>
     </div>
 
     <table id="gpu-table" class="display" style="width:100%">
@@ -64,9 +82,10 @@
         <tbody>
         </tbody>
     </table>
+
     <script>
         var table = $('#gpu-table').DataTable({ searching: true });
-        var servers = ['banana', 'chai', 'cheetah', 'citrus', 'davincci', 'frappe', 'guacamole', 'kiwi', 'latte', 'lavazza', 'lilac', 'lox', 'macchiato', 'matcha', 'platypus']
+        var servers = ['banana', 'chai', 'cheetah', 'citrus', 'davincci', 'guacamole', 'kiwi', 'latte', 'lavazza', 'lilac', 'lox', 'macchiato', 'matcha', 'platypus'];
         var lastData = {};
 
         function parseValue(value) {
@@ -80,52 +99,95 @@
 
             servers.forEach(function (hostname) {
                 $.getJSON('/gpu_data/' + hostname, function (data) {
-                    // Filter data
                     var filteredData = data.filter(gpu => {
                         var memory = parseValue(gpu.memory);
                         var utilization = parseValue(gpu.utilization);
                         return memory <= memoryFilter && utilization <= utilizationFilter;
                     });
 
-                    // Compare with last fetched data
                     if (JSON.stringify(lastData[hostname]) !== JSON.stringify(filteredData)) {
-                        // Remove existing rows for this server
                         table.rows(function (idx, data, node) {
                             return data[0] === hostname;
                         }).remove();
 
-                        // If the server is not selected and it's not 'all' then just update the lastData without rendering
                         if (selectedServer !== 'all' && selectedServer !== hostname) {
                             lastData[hostname] = filteredData;
                             return;
                         }
 
-                        // Add new rows
                         filteredData.forEach((gpu, index) => {
-                            var row = [];
-                            row.push(hostname);
-                            row.push(index);
-                            row.push(gpu.name);
-                            row.push(gpu.temperature);
-                            row.push(gpu.power);
-                            row.push(gpu.memory);
-                            row.push(gpu.utilization);
+                            var row = [hostname, index, gpu.name, gpu.temperature, gpu.power, gpu.memory, gpu.utilization];
                             table.row.add(row);
                         });
 
                         table.draw();
                     }
 
-                    // Store last fetched data
                     lastData[hostname] = filteredData;
                 });
             });
         }
 
+        // Populate server select options
+        servers.forEach(function (server) {
+            $('#server-select, #experiment-server').append($('<option>', {
+                value: server,
+                text: server
+            }));
+        });
+
+        // Update GPU options when server is selected
+        $('#experiment-server').change(function () {
+            var selectedServer = $(this).val();
+            $.getJSON('/gpu_data/' + selectedServer, function (data) {
+                $('#experiment-gpus').empty();
+                data.forEach(function (gpu, index) {
+                    $('#experiment-gpus').append($('<option>', {
+                        value: index,
+                        text: 'GPU ' + index + ' - ' + gpu.name
+                    }));
+                });
+            });
+        });
+
+        // Handle experiment form submission
+        $('#experiment-form').submit(function (e) {
+            e.preventDefault();
+            var server = $('#experiment-server').val();
+            var gpus = $('#experiment-gpus').val();
+            var project = $('#experiment-project').val();
+            var command = $('#experiment-command').val();
+
+            $('#experiment-output').html('<div class="alert alert-info">Launching experiment...</div>');
+
+            $.ajax({
+                url: '/launch_experiment',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    hostname: server,
+                    gpu_ids: gpus,
+                    project: project,
+                    command: command
+                }),
+                success: function (response) {
+                    var output = '<h5>Git Pull Output:</h5><pre>' + response.pull_output + '</pre>';
+                    response.results.forEach(function (result) {
+                        output += '<h5>GPU ' + result.gpu_id + ' (Architecture: ' + result.architecture + ')</h5>' +
+                            '<pre>Command: ' + result.command + '\n\nOutput:\n' + result.output + '</pre>';
+                    });
+                    $('#experiment-output').html('<div class="alert alert-success">Experiment launched successfully!</div>' + output);
+                },
+                error: function (xhr, status, error) {
+                    $('#experiment-output').html('<div class="alert alert-danger">Error launching experiment: ' + error + '</div><pre>' + xhr.responseText + '</pre>');
+                }
+            });
+        });
+
         // Initial table update
         updateTable();
 
-        // Update the table every second for the selected server(s).
+        // Update the table every second
         setInterval(updateTable, 1000);
     </script>
 </body>
