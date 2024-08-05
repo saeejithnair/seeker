@@ -119,7 +119,7 @@
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
     <script>
-        const servers = ['banana', 'chai', 'cheetah', 'citrus', 'davincci', 'guacamole', 'kiwi', 'latte', 'lavazza', 'lilac', 'lox', 'macchiato', 'matcha', 'platypus'];
+        let servers = [];
         let table;
         let lastData = {};
         let currentFilters = {
@@ -131,12 +131,24 @@
 
         $(document).ready(function () {
             initializeTable();
-            populateServerOptions();
-            setupEventListeners();
-            updateTable();
-            setInterval(updateTable, 500);
-            setInterval(updateGPUSelections, 500);
+            fetchServers().then(() => {
+                populateServerOptions();
+                setupEventListeners();
+                updateTable();
+                setInterval(updateTable, 500);
+                setInterval(updateGPUSelections, 500);
+            });
         });
+
+        function fetchServers() {
+            return $.getJSON('/servers')
+                .then(data => {
+                    servers = data;
+                })
+                .catch(error => {
+                    console.error('Error fetching servers:', error);
+                });
+        }
 
         function initializeTable() {
             table = $('#gpu-table').DataTable({

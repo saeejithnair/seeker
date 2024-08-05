@@ -2,6 +2,7 @@
 from paramiko import SSHClient, AutoAddPolicy
 from threading import Thread
 from queue import Queue
+import yaml
 
 
 class Server:
@@ -34,20 +35,11 @@ class Server:
         return stdout.read().decode()
 
 
-SERVERS_LIST = [
-    "banana",
-    "chai",
-    "cheetah",
-    "citrus",
-    "davincci",
-    "guacamole",
-    "kiwi",
-    "latte",
-    "lavazza",
-    "lilac",
-    "lox",
-    "macchiato",
-    "matcha",
-    "platypus",
-]
+def load_servers_config():
+    with open("servers.yaml", "r") as file:
+        config = yaml.safe_load(file)
+    return config["servers"]
+
+
+SERVERS_LIST = load_servers_config()
 SERVERS = {key: Server(f"{key}.uwaterloo.ca") for key in SERVERS_LIST}

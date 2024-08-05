@@ -1,6 +1,6 @@
 # app.py
 from flask import Flask, jsonify, request, send_from_directory
-from servers import Server, SERVERS
+from servers import Server, SERVERS, SERVERS_LIST
 import json
 
 app = Flask(__name__)
@@ -30,6 +30,11 @@ def parse_nvidia_smi_output(output):
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")
+
+
+@app.route("/servers")
+def get_servers():
+    return jsonify(SERVERS_LIST)
 
 
 @app.route("/gpu_data/<hostname>")
