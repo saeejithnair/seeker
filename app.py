@@ -17,15 +17,18 @@ def parse_nvidia_smi_output(output):
             # Split the line by comma and strip each element
             elements = [element.strip() for element in line.split(",")]
 
-            gpu_info = {
-                "name": elements[0],
-                "temperature": f"{elements[6]}°C",
-                "power": f"{elements[1]} / {elements[5]}",
-                "memory": f"{elements[2]} / {elements[3]}",
-                "utilization": elements[4],
-            }
-
-            gpu_data.append(gpu_info)
+            try:
+                gpu_info = {
+                    "name": elements[0],
+                    "temperature": f"{elements[6]}°C",
+                    "power": f"{elements[1]} / {elements[5]}",
+                    "memory": f"{elements[2]} / {elements[3]}",
+                    "utilization": elements[4],
+                }
+                gpu_data.append(gpu_info)
+            except IndexError as e:
+                print(f"Error parsing line: {line}")
+                raise e
 
     return gpu_data
 
@@ -45,14 +48,19 @@ def gpu_data(hostname):
     if transport is None or not transport.is_active():
         return jsonify({"error": "Server is not connected"}), 500
 
-    def callback(output):
-        # Parse the nvidia-smi output and store it in the server object.
-        server.gpu_data = parse_nvidia_smi_output(output)
-
     command = (
         f"nvidia-smi --query-gpu=name,power.draw,memory.used,memory.total,"
         f"utilization.gpu,power.max_limit,temperature.gpu --format=csv"
     )
+
+    def callback(output):
+        # Parse the nvidia-smi output and store it in the server object.
+        try:
+            server.gpu_data = parse_nvidia_smi_output(output)
+        except Exception as e:
+            print(f"Error parsing nvidia-smi output for {hostname} and command: {command}. Received error: {e}")
+            raise e
+
     server.exec_command(command, callback)
 
     # Wait for the command to finish.

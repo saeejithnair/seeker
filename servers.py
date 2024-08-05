@@ -30,20 +30,21 @@ class Server:
         self.queue.put((command, callback))
 
 
-SERVERS = {
-    "banana": Server("129.97.1.49"),
-    "chai": Server("129.97.250.21"),
-    "cheetah": Server("129.97.1.47", username="saeejith"),
-    "citrus": Server("129.97.250.66"),
-    "davincci": Server("129.97.251.70"),
-    "frappe": Server("129.97.251.244"),
-    "guacamole": Server("129.97.251.225"),
-    "kiwi": Server("129.97.1.45", username="saeejith"),
-    "latte": Server("129.97.251.209"),
-    "lavazza": Server("129.97.250.2"),
-    "lilac": Server("129.97.250.62"),
-    "lox": Server("129.97.250.179"),
-    "macchiato": Server("129.97.251.198"),
-    "matcha": Server("129.97.250.15"),
-    "platypus": Server("129.97.201.17"),
-}
+SERVERS_LIST = [
+    "banana",
+    "chai",
+    "cheetah",
+    "citrus",
+    "davincci",
+    # "frappe",
+    "guacamole",
+    "kiwi",
+    "latte",
+    "lavazza",
+    "lilac",
+    "lox",
+    "macchiato",
+    "matcha",
+    "platypus",
+]
+SERVERS = {key: Server(f"{key}.uwaterloo.ca") for key in SERVERS_LIST}
