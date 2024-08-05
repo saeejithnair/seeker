@@ -1,54 +1,83 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPU Dashboard</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.css">
-    <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
-    <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.css">
+    <style>
+        .server-gpu-selection {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, .3);
+            border-radius: 50%;
+            border-top-color: #000;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .gpu-option {
+            padding: 5px;
+            margin: 2px 0;
+            border-radius: 3px;
+        }
+
+        .gpu-option.disabled {
+            color: #999;
+            background-color: #f0f0f0;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="container">
-        <div class="row">
+    <div class="container-fluid">
+        <h1 class="mt-4 mb-4">GPU Dashboard</h1>
+
+        <div class="row mb-4">
             <div class="col-md-3">
                 <label for="server-select">Select Server</label>
                 <select id="server-select" class="form-control">
                     <option value="all">All</option>
-                    <!-- Server options will be dynamically populated -->
                 </select>
             </div>
             <div class="col-md-3">
-                <label for="memory-filter">Memory Filter (<= MiB)</label>
-                        <input type="number" id="memory-filter" class="form-control" placeholder="Enter Memory">
+                <label for="memory-filter">Memory Filter (&le; MiB)</label>
+                <input type="number" id="memory-filter" class="form-control" placeholder="Enter Memory">
             </div>
             <div class="col-md-3">
-                <label for="utilization-filter">Utilization Filter (<= %)</label>
-                        <input type="number" id="utilization-filter" class="form-control"
-                            placeholder="Enter Utilization">
+                <label for="utilization-filter">Utilization Filter (&le; %)</label>
+                <input type="number" id="utilization-filter" class="form-control" placeholder="Enter Utilization">
             </div>
             <div class="col-md-3">
-                <button class="btn btn-primary mt-4" onclick="updateTable()">Filter</button>
+                <button class="btn btn-primary mt-4" onclick="applyFilters()">Apply Filters</button>
             </div>
         </div>
 
-        <div class="row mt-4">
+        <div class="row mt-5 mb-5">
             <div class="col-md-12">
                 <h3>Launch Experiment</h3>
                 <form id="experiment-form">
                     <div class="form-group">
-                        <label for="experiment-server">Server</label>
-                        <select id="experiment-server" class="form-control" required>
-                            <!-- Server options will be dynamically populated -->
+                        <label for="experiment-servers">Select Servers</label>
+                        <select id="experiment-servers" class="form-control" multiple required>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="experiment-gpus">GPUs</label>
-                        <select id="experiment-gpus" class="form-control" multiple required>
-                            <!-- GPU options will be dynamically populated -->
-                        </select>
-                    </div>
+                    <div id="server-gpu-selections"></div>
                     <div class="form-group">
                         <label for="experiment-project">Project</label>
                         <input type="text" id="experiment-project" class="form-control" required
@@ -64,131 +93,264 @@
             </div>
         </div>
 
-        <div id="experiment-output" class="mt-4"></div>
+        <div id="experiment-output" class="mt-4 mb-5"></div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <table id="gpu-table" class="display" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Server</th>
+                            <th>GPU</th>
+                            <th>Name</th>
+                            <th>Temp</th>
+                            <th>Power</th>
+                            <th>Memory</th>
+                            <th>Utilization</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
-    <table id="gpu-table" class="display" style="width:100%">
-        <thead>
-            <tr>
-                <th>Server</th>
-                <th>GPU</th>
-                <th>Name</th>
-                <th>Temp</th>
-                <th>Power</th>
-                <th>Memory</th>
-                <th>Utilization</th>
-            </tr>
-        </thead>
-        <tbody>
-        </tbody>
-    </table>
-
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.min.js"></script>
     <script>
-        var table = $('#gpu-table').DataTable({ searching: true });
-        var servers = ['banana', 'chai', 'cheetah', 'citrus', 'davincci', 'guacamole', 'kiwi', 'latte', 'lavazza', 'lilac', 'lox', 'macchiato', 'matcha', 'platypus'];
-        var lastData = {};
+        const servers = ['banana', 'chai', 'cheetah', 'citrus', 'davincci', 'guacamole', 'kiwi', 'latte', 'lavazza', 'lilac', 'lox', 'macchiato', 'matcha', 'platypus'];
+        let table;
+        let lastData = {};
+        let currentFilters = {
+            memoryFilter: Infinity,
+            utilizationFilter: Infinity
+        };
+        let gpuData = {};
+        let selectedGPUs = {};
 
-        function parseValue(value) {
-            return parseFloat(value.split(' ')[0]);
+        $(document).ready(function () {
+            initializeTable();
+            populateServerOptions();
+            setupEventListeners();
+            updateTable();
+            setInterval(updateTable, 500);
+            setInterval(updateGPUSelections, 500);
+        });
+
+        function initializeTable() {
+            table = $('#gpu-table').DataTable({
+                searching: true,
+                paging: false,
+                info: false,
+                columns: [
+                    { data: 'server' },
+                    { data: 'gpu' },
+                    { data: 'name' },
+                    { data: 'temperature' },
+                    { data: 'power' },
+                    { data: 'memory' },
+                    { data: 'utilization' }
+                ]
+            });
+        }
+
+        function populateServerOptions() {
+            const serverSelect = $('#server-select');
+            const experimentServers = $('#experiment-servers');
+            servers.forEach(server => {
+                serverSelect.append($('<option>', { value: server, text: server }));
+                experimentServers.append($('<option>', { value: server, text: server }));
+            });
+        }
+
+        function setupEventListeners() {
+            $('#experiment-servers').change(updateGPUSelections);
+            $('#experiment-form').submit(handleExperimentSubmit);
+            $('#server-gpu-selections').on('change', 'input[type="checkbox"]', function () {
+                const server = $(this).closest('.server-gpu-selection').data('server');
+                const gpuId = $(this).val();
+                if (!selectedGPUs[server]) {
+                    selectedGPUs[server] = new Set();
+                }
+                if (this.checked) {
+                    selectedGPUs[server].add(gpuId);
+                } else {
+                    selectedGPUs[server].delete(gpuId);
+                }
+            });
+        }
+
+        function applyFilters() {
+            currentFilters.memoryFilter = Number($('#memory-filter').val()) || Infinity;
+            currentFilters.utilizationFilter = Number($('#utilization-filter').val()) || Infinity;
+            updateTable();
+            updateGPUSelections();
         }
 
         function updateTable() {
-            var selectedServer = $('#server-select').val();
-            var memoryFilter = Number($('#memory-filter').val()) || Infinity;
-            var utilizationFilter = Number($('#utilization-filter').val()) || Infinity;
+            const selectedServer = $('#server-select').val();
 
-            servers.forEach(function (hostname) {
-                $.getJSON('/gpu_data/' + hostname, function (data) {
-                    var filteredData = data.filter(gpu => {
-                        var memory = parseValue(gpu.memory);
-                        var utilization = parseValue(gpu.utilization);
-                        return memory <= memoryFilter && utilization <= utilizationFilter;
-                    });
+            const promises = servers.map(hostname => {
+                if (selectedServer !== 'all' && selectedServer !== hostname) {
+                    return Promise.resolve(null);
+                }
+                return $.getJSON('/gpu_data/' + hostname)
+                    .then(data => ({ hostname, data }))
+                    .catch(error => ({ hostname, error }));
+            });
 
-                    if (JSON.stringify(lastData[hostname]) !== JSON.stringify(filteredData)) {
-                        table.rows(function (idx, data, node) {
-                            return data[0] === hostname;
-                        }).remove();
-
-                        if (selectedServer !== 'all' && selectedServer !== hostname) {
-                            lastData[hostname] = filteredData;
-                            return;
-                        }
-
-                        filteredData.forEach((gpu, index) => {
-                            var row = [hostname, index, gpu.name, gpu.temperature, gpu.power, gpu.memory, gpu.utilization];
-                            table.row.add(row);
-                        });
-
-                        table.draw();
+            Promise.all(promises).then(results => {
+                const newData = [];
+                results.forEach(result => {
+                    if (!result) return;
+                    const { hostname, data, error } = result;
+                    if (error) {
+                        console.error(`Error fetching data for ${hostname}:`, error);
+                        return;
                     }
-
-                    lastData[hostname] = filteredData;
+                    gpuData[hostname] = data;
+                    data.forEach((gpu, index) => {
+                        const memory = parseFloat(gpu.memory.split(' ')[0]);
+                        const utilization = parseFloat(gpu.utilization);
+                        if (memory <= currentFilters.memoryFilter && utilization <= currentFilters.utilizationFilter) {
+                            newData.push({
+                                server: hostname,
+                                gpu: index,
+                                name: gpu.name,
+                                temperature: gpu.temperature,
+                                power: gpu.power,
+                                memory: gpu.memory,
+                                utilization: gpu.utilization
+                            });
+                        }
+                    });
                 });
+
+                if (JSON.stringify(lastData) !== JSON.stringify(newData)) {
+                    table.clear().rows.add(newData).draw();
+                    lastData = newData;
+                }
             });
         }
 
-        // Populate server select options
-        servers.forEach(function (server) {
-            $('#server-select, #experiment-server').append($('<option>', {
-                value: server,
-                text: server
-            }));
-        });
+        function updateGPUSelections() {
+            const selectedServers = $('#experiment-servers').val();
+            const serverGPUSelections = $('#server-gpu-selections');
 
-        // Update GPU options when server is selected
-        $('#experiment-server').change(function () {
-            var selectedServer = $(this).val();
-            $.getJSON('/gpu_data/' + selectedServer, function (data) {
-                $('#experiment-gpus').empty();
-                data.forEach(function (gpu, index) {
-                    $('#experiment-gpus').append($('<option>', {
-                        value: index,
-                        text: 'GPU ' + index + ' - ' + gpu.name
-                    }));
-                });
+            selectedServers.forEach(server => {
+                let serverDiv = serverGPUSelections.find(`#server-${server}`);
+                if (serverDiv.length === 0) {
+                    serverDiv = $('<div>').attr('id', `server-${server}`).addClass('server-gpu-selection').data('server', server);
+                    const label = $('<label>').text(`Select GPUs for ${server}`);
+                    const gpuContainer = $('<div>').addClass('gpu-container');
+                    serverDiv.append(label, gpuContainer);
+                    serverGPUSelections.append(serverDiv);
+                }
+
+                const gpuContainer = serverDiv.find('.gpu-container');
+
+                if (gpuData[server]) {
+                    updateGPUOptions(server, gpuData[server], gpuContainer);
+                } else {
+                    $.getJSON(`/gpu_data/${server}`)
+                        .then(data => {
+                            gpuData[server] = data;
+                            updateGPUOptions(server, data, gpuContainer);
+                        })
+                        .catch(error => {
+                            console.error(`Error fetching GPU data for ${server}:`, error);
+                            gpuContainer.html('<div class="text-danger">Error loading GPUs</div>');
+                        });
+                }
             });
-        });
 
-        // Handle experiment form submission
-        $('#experiment-form').submit(function (e) {
+            // Remove server divs for unselected servers
+            serverGPUSelections.children().each(function () {
+                const serverId = $(this).attr('id').replace('server-', '');
+                if (!selectedServers.includes(serverId)) {
+                    $(this).remove();
+                    delete selectedGPUs[serverId];
+                }
+            });
+        }
+
+        function updateGPUOptions(server, data, container) {
+            data.forEach((gpu, index) => {
+                const memory = parseFloat(gpu.memory.split(' ')[0]);
+                const utilization = parseFloat(gpu.utilization);
+                const isDisabled = memory > currentFilters.memoryFilter || utilization > currentFilters.utilizationFilter;
+
+                let gpuOption = container.find(`#gpu-${server}-${index}`);
+                if (gpuOption.length === 0) {
+                    gpuOption = $('<div>').attr('id', `gpu-${server}-${index}`).addClass('gpu-option');
+                    container.append(gpuOption);
+                }
+
+                const isChecked = selectedGPUs[server] && selectedGPUs[server].has(index.toString());
+
+                const checkbox = $('<input>').attr({
+                    type: 'checkbox',
+                    id: `gpu-checkbox-${server}-${index}`,
+                    name: `gpus-${server}[]`,
+                    value: index
+                }).prop('disabled', isDisabled).prop('checked', isChecked);
+
+                const label = $('<label>').attr('for', `gpu-checkbox-${server}-${index}`)
+                    .text(`GPU ${index} - ${gpu.name} (${gpu.memory}, ${gpu.utilization} util)`)
+                    .prepend(checkbox);
+
+                gpuOption.html(label).toggleClass('disabled', isDisabled);
+            });
+        }
+
+        function handleExperimentSubmit(e) {
             e.preventDefault();
-            var server = $('#experiment-server').val();
-            var gpus = $('#experiment-gpus').val();
-            var project = $('#experiment-project').val();
-            var command = $('#experiment-command').val();
+            const servers = $('#experiment-servers').val();
+            const gpuSelections = {};
+            servers.forEach(server => {
+                gpuSelections[server] = Array.from(selectedGPUs[server] || []).map(Number);
+            });
+            const project = $('#experiment-project').val();
+            const command = $('#experiment-command').val();
 
-            $('#experiment-output').html('<div class="alert alert-info">Launching experiment...</div>');
+            const experimentOutput = $('#experiment-output');
+            experimentOutput.html('<div class="alert alert-info">Launching experiment... <div class="loading"></div></div>');
 
             $.ajax({
                 url: '/launch_experiment',
                 method: 'POST',
                 contentType: 'application/json',
                 data: JSON.stringify({
-                    hostname: server,
-                    gpu_ids: gpus,
+                    servers: servers,
+                    gpu_selections: gpuSelections,
                     project: project,
                     command: command
                 }),
                 success: function (response) {
-                    var output = '<h5>Git Pull Output:</h5><pre>' + response.pull_output + '</pre>';
-                    response.results.forEach(function (result) {
-                        output += '<h5>GPU ' + result.gpu_id + ' (Architecture: ' + result.architecture + ')</h5>' +
-                            '<pre>Command: ' + result.command + '\n\nOutput:\n' + result.output + '</pre>';
+                    let output = '<h4>Experiment Results:</h4>';
+                    response.results.forEach(result => {
+                        output += `<div class="card mb-3">
+                            <div class="card-header"><strong>Server: ${result.hostname}</strong></div>
+                            <div class="card-body">`;
+                        if (result.error) {
+                            output += `<div class="alert alert-danger">Error: ${result.error}</div>`;
+                        } else {
+                            output += `<h5>Git Pull Output:</h5><pre>${result.pull_output}</pre>`;
+                            result.gpu_results.forEach(gpuResult => {
+                                output += `<h5>GPU ${gpuResult.gpu_id} (Architecture: ${gpuResult.architecture})</h5>
+                                    <pre>Command: ${gpuResult.command}\n\nOutput:\n${gpuResult.output}</pre>`;
+                            });
+                        }
+                        output += '</div></div>';
                     });
-                    $('#experiment-output').html('<div class="alert alert-success">Experiment launched successfully!</div>' + output);
+                    experimentOutput.html('<div class="alert alert-success">Experiment launched successfully!</div>' + output);
                 },
                 error: function (xhr, status, error) {
-                    $('#experiment-output').html('<div class="alert alert-danger">Error launching experiment: ' + error + '</div><pre>' + xhr.responseText + '</pre>');
+                    experimentOutput.html(`<div class="alert alert-danger">Error launching experiment: ${error}</div><pre>${xhr.responseText}</pre>`);
                 }
             });
-        });
-
-        // Initial table update
-        updateTable();
-
-        // Update the table every second
-        setInterval(updateTable, 1000);
+        }
     </script>
 </body>
 

@@ -1,6 +1,7 @@
 # app.py
 from flask import Flask, jsonify, request, send_from_directory
 from servers import Server, SERVERS
+import json
 
 app = Flask(__name__)
 
@@ -59,51 +60,59 @@ def gpu_data(hostname):
 @app.route("/launch_experiment", methods=["POST"])
 def launch_experiment():
     data = request.json
-    hostname = data["hostname"]
-    gpu_ids = data["gpu_ids"]
+    servers = data["servers"]
+    gpu_selections = data["gpu_selections"]
     project = data["project"]
     command = data["command"]
 
-    server = SERVERS.get(hostname)
-    if not server:
-        return jsonify({"error": "Unknown server"}), 404
+    results = []
 
-    try:
-        # Pull the latest project changes
-        pull_command = f"cd {project} && git pull"
-        pull_output = server.exec_command_sync(pull_command)
-        print(f"Git pull output: {pull_output}")
+    for hostname in servers:
+        server = SERVERS.get(hostname)
+        if not server:
+            results.append({"hostname": hostname, "error": "Unknown server"})
+            continue
 
-        results = []
-        for gpu_id in gpu_ids:
-            arch_command = (
-                f"nvidia-smi --query-gpu=compute_cap --format=csv,noheader -i {gpu_id}"
-            )
-            architecture = server.exec_command_sync(arch_command).strip()
-            # Convert architecture from "8.6" format to "86" format
-            architecture = architecture.replace(".", "")
-            print(f"GPU {gpu_id} architecture: {architecture}")
+        try:
+            # Pull the latest project changes
+            pull_command = f"cd {project} && git pull"
+            pull_output = server.exec_command_sync(pull_command)
+            print(f"Git pull output for {hostname}: {pull_output}")
 
-            env_vars = f"GPU_IDS={gpu_id} CUDA_ARCHITECTURES={architecture}"
-            full_command = f"cd {project} && {env_vars} {command}"
-            print(f"Executing command for GPU {gpu_id}: {full_command}")
+            gpu_results = []
+            for gpu_id in gpu_selections.get(hostname, []):
+                arch_command = f"nvidia-smi --query-gpu=compute_cap --format=csv,noheader -i {gpu_id}"
+                architecture = server.exec_command_sync(arch_command).strip()
+                architecture = architecture.replace(".", "")
+                print(f"GPU {gpu_id} architecture on {hostname}: {architecture}")
 
-            output = server.exec_command_sync(full_command)
+                env_vars = f"GPU_IDS={gpu_id} CUDA_ARCHITECTURES={architecture}"
+                full_command = f"cd {project} && {env_vars} {command}"
+                print(f"Executing command for {hostname} GPU {gpu_id}: {full_command}")
+
+                output = server.exec_command_sync(full_command)
+                gpu_results.append(
+                    {
+                        "gpu_id": gpu_id,
+                        "architecture": architecture,
+                        "command": full_command,
+                        "output": output,
+                    }
+                )
+
             results.append(
                 {
-                    "gpu_id": gpu_id,
-                    "architecture": architecture,
-                    "command": full_command,
-                    "output": output,
+                    "hostname": hostname,
+                    "pull_output": pull_output,
+                    "gpu_results": gpu_results,
                 }
             )
 
-        return jsonify(
-            {"success": True, "pull_output": pull_output, "results": results}
-        )
-    except Exception as e:
-        print(f"Error launching experiment: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        except Exception as e:
+            print(f"Error launching experiment on {hostname}: {str(e)}")
+            results.append({"hostname": hostname, "error": str(e)})
+
+    return jsonify({"results": results})
 
 
 @app.route("/get_gpu_architectures/<hostname>")
@@ -120,4 +129,4 @@ def get_gpu_architectures(hostname):
 
 
 if __name__ == "__main__":
-    app.run(port=5001)
+    app.run(port=5001, debug=True)
