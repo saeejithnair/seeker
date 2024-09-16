@@ -1,9 +1,9 @@
 servers:
   - banana
   - chai
-  - cheetah
+  # - cheetah
   - citrus
-  - davincci
+  # - davincci
   - guacamole
   - kiwi
   - latte
